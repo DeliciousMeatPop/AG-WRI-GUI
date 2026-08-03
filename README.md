@@ -1,80 +1,86 @@
-# WRI-GUI — Windows Runtime Installer (GUI)
+# AG-WRI-GUI — Windows Runtime Installer (GUI)
 
 A single-file PowerShell tool that installs the common Microsoft runtimes a
-lot of Windows software depends on. Run it with one command:
+lot of Windows software (especially games) depends on. Run it with one
+command:
 
 ```powershell
 irm https://wri-gui.top | iex
 ```
 
-It opens a small GUI where you tick what you want, skips anything already
-installed, downloads each package straight from Microsoft, and installs it
-silently.
+This repo is the restored original WRI-GUI (recovered from the live
+deployment after the original GitHub account was deleted), with the one
+thing that broke it fixed: the package list used to be fetched from a
+`redists.json` on the deleted account, and is now inlined into the script so
+it has **no external dependencies** besides Microsoft's own download servers.
 
 ## Features
 
-- **Pick what you want** — checkboxes for every package, plus *Select all* /
-  *Select none*.
-- **Detects what's already there** — reads the registry (uninstall entries,
-  the VC++ 14 `Runtimes` keys, and the .NET release value) and greys out
-  anything already installed so you don't reinstall it.
-- **Full range of Visual C++ Redistributables** — 2005, 2008, 2010, 2012,
-  2013 and 2015–2022, in both x86 and x64.
-- **A few common extras** — .NET Framework 4.8 and the DirectX End-User
-  Runtime.
-- **Self-elevating** — if you're not admin it re-launches itself elevated.
+- **Tabbed GUI** — Visual C++ / .NET Framework & Runtime / Extras tabs, dark
+  theme, with per-package checkboxes and version labels.
+- **Preset buttons** — Select All, Select None, VC++ Only, Essentials
+  (VC++ + DirectX), Gaming (VC++ + DirectX + OpenAL + XNA).
+- **Detects what's already installed** — registry uninstall entries, .NET
+  release values, `VCRUNTIME140_1.dll` presence for the unified 2015–2022
+  runtime, DirectX DLL checks — and greys out anything already present.
+- **Progress screen** — progress bar plus a colored status log while
+  installing.
+- **Self-elevating** — works both when piped from the web (`irm | iex`
+  re-runs the one-liner elevated) and when run from a saved `.ps1` file.
 - **Restart prompt on close** — after installing, closing the window shows a
-  plain Yes/No "A Windows restart is strongly advised. Restart?" prompt so
-  every process picks up the new runtime files.
+  plain Yes/No "A Windows restart is strongly advised. Restart?" prompt.
+  It never restarts without you clicking **Yes**.
 
 ## What's included
 
-| Category | Packages |
-|----------|----------|
-| Visual C++ Redistributables | 2005, 2008, 2010, 2012 (Update 4), 2013, 2015–2022 — x86 and x64 |
-| Other runtimes | .NET Framework 4.8, DirectX End-User Runtime (web) |
+| Tab | Packages |
+|-----|----------|
+| Visual C++ | 2005, 2008, 2010, 2012 (U4), 2013, 2015–2022 — each installs x86 + x64 |
+| .NET | Framework 3.5 (via DISM), Framework 4.8, Desktop Runtime 6 / 8 / 9 |
+| Extras | DirectX End-User Runtime (June 2010, full redist), OpenAL, XNA Framework 4.0 |
 
-The 2015–2022 package is the current combined `v14x` redistributable, which
-supersedes the separate 2015, 2017 and 2019 versions.
+Install exit codes `0`, `1638`, `3010`, `1641`, `5100` are treated as
+success (already installed / newer present / reboot pending).
 
-## How detection works
+## Deploying to wri-gui.top
 
-The script reads the installed-programs list once from:
+The domain's DNS lives at Hostinger (`ns*.dnsowl.com`) and points at
+**Netlify** — the site itself is a Netlify deploy. To update it:
 
-- `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*`
-- `HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*`
+1. Log in at [app.netlify.com](https://app.netlify.com) and open the site
+   that has `wri-gui.top` as its custom domain.
+2. Go to **Deploys** and drag-and-drop the [`deploy/`](./deploy) folder from
+   this repo onto the page (or connect this repo with publish directory
+   `deploy`).
+3. Done — `deploy/netlify.toml` rewrites `/` to `wri-gui.ps1` and serves it
+   as `text/plain`, which is exactly what `irm | iex` needs.
 
-Each catalogue entry is matched against those display names (with an x86/x64
-guard). The 2015–2022 redistributables and .NET 4.8 additionally check a
-specific registry value for a more reliable result.
+Verify with:
 
-## Exit codes handled
+```powershell
+irm https://wri-gui.top   # should print the script, starting with the WRI banner
+```
 
-- `0` — installed OK
-- `3010` — installed OK, reboot required (flags the restart prompt)
-- `1638` — a newer version is already present (treated as success)
+No Hostinger changes are needed; DNS already points at Netlify.
 
-## Deployment
+## Repo layout
 
-For `irm https://wri-gui.top | iex` to work, the web server at that domain
-must return the **raw** contents of [`wri-gui.ps1`](./wri-gui.ps1) as text at
-the site root (`Content-Type: text/plain` is ideal; `iex` will also accept
-`text/html` as long as the body is only the script).
+| Path | Purpose |
+|------|---------|
+| `wri-gui.ps1` | The script (source of truth) |
+| `deploy/` | Ready-to-drop Netlify folder (script + `netlify.toml`) |
+| `recovered/wri-gui.original.ps1` | Byte-for-byte copy of the old live script, for reference |
 
-Options:
-
-- Serve `wri-gui.ps1` directly as the root document, or
-- Redirect `/` to the raw file (e.g. GitHub raw, a CDN, or your own host).
-
-The self-elevation step re-runs the same one-liner, so keep the URL stable.
+If you edit `wri-gui.ps1`, copy it over `deploy/wri-gui.ps1` before
+redeploying.
 
 ## Safety notes
 
-- The script is deliberately plain — no obfuscation, no persistence, nothing
-  hidden. Read it before you run it; `irm | iex` runs whatever the URL
-  returns.
-- All downloads come from `microsoft.com` / `aka.ms` / `go.microsoft.com`.
-- It never restarts your PC without you clicking **Yes** on the prompt.
+- The script is plain and readable — no obfuscation, no persistence. Read it
+  before you run it; `irm | iex` runs whatever the URL returns.
+- All downloads come from `microsoft.com` / `aka.ms` / `go.microsoft.com`
+  (plus `openal.org` for OpenAL).
+- Downloaded executables are checked for a valid `MZ` header before running.
 
 ## License
 
