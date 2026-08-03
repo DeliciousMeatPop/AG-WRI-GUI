@@ -23,9 +23,9 @@ silently.
 - **A few common extras** — .NET Framework 4.8 and the DirectX End-User
   Runtime.
 - **Self-elevating** — if you're not admin it re-launches itself elevated.
-- **Restart prompt on close** — after installing, closing the window offers a
-  restart (with a 60-second, cancellable countdown) so every process picks up
-  the new runtime files.
+- **Restart prompt on close** — after installing, closing the window shows a
+  plain Yes/No "A Windows restart is strongly advised. Restart?" prompt so
+  every process picks up the new runtime files.
 
 ## What's included
 
@@ -74,8 +74,7 @@ The self-elevation step re-runs the same one-liner, so keep the URL stable.
   hidden. Read it before you run it; `irm | iex` runs whatever the URL
   returns.
 - All downloads come from `microsoft.com` / `aka.ms` / `go.microsoft.com`.
-- It never restarts your PC without you clicking **Yes**, and the restart
-  uses a 60-second countdown you can cancel with `shutdown /a`.
+- It never restarts your PC without you clicking **Yes** on the prompt.
 
 ## License
 

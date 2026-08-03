@@ -407,12 +407,8 @@ $btnInstall.Add_Click({
 $form.Add_FormClosing({
     if (-not $script:DidInstall) { return }
 
-    $msg = "Runtimes were installed.`r`n`r`n" +
-           "A restart is recommended so every program picks up the new " +
-           "runtime files. Some installers also flagged that a reboot is " +
-           "required to finish.`r`n`r`n" +
-           "Restart now? (You'll get a 60-second countdown you can cancel " +
-           "by running:  shutdown /a )"
+    $msg = "A Windows restart is strongly advised so every program picks up " +
+           "the new runtime files.`r`n`r`nRestart?"
 
     $res = [System.Windows.Forms.MessageBox]::Show(
         $msg, 'Restart recommended',
@@ -422,7 +418,7 @@ $form.Add_FormClosing({
 
     if ($res -eq [System.Windows.Forms.DialogResult]::Yes) {
         try {
-            Start-Process -FilePath 'shutdown.exe' -ArgumentList '/r','/t','60','/c','"Restarting to finish installing runtimes (run: shutdown /a  to cancel)"' -WindowStyle Hidden
+            Start-Process -FilePath 'shutdown.exe' -ArgumentList '/r','/t','0' -WindowStyle Hidden
         } catch { }
     }
 })
