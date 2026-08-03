@@ -90,6 +90,15 @@ $Redists = @{
 $script:failures = @()
 $script:installCompleted = $false
 
+# Hidden screenshot/demo mode. Not documented in the README. When on, the
+# installer skips all "is it already installed?" detection so every item
+# shows as available (nothing greyed out) - useful for clean screenshots on a
+# machine that already has everything. Turn it on by setting an environment
+# variable before running, e.g.:
+#     $env:WRI_DEMO=1; irm https://wri-gui.top | iex
+# or by defining $WRI_DEMO before invoking the script.
+$script:DemoMode = [bool]$env:WRI_DEMO -or [bool]$WRI_DEMO
+
 function Test-VCRedistInstalled {
     param([string]$Name)
 
@@ -353,6 +362,9 @@ function Add-RuntimeCheckbox {
 		}
 	}
 
+
+	# Screenshot/demo mode: pretend nothing is installed (see $script:DemoMode).
+	if ($script:DemoMode) { $installed = $false }
 
 	if ($installed) {
 		$cb.Checked = $false
