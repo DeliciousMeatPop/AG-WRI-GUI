@@ -1,117 +1,70 @@
-# AG-WRI-GUI — Windows Runtime Installer (GUI)
+# Windows Runtime Installer (WRI-GUI)
 
-A single-file PowerShell tool that installs the common Microsoft runtimes a
-lot of Windows software (especially games) depends on. Run it with one
-command:
+Installs the common Microsoft runtimes that a lot of Windows software —
+especially games — needs to run: the full range of Visual C++
+Redistributables, .NET, DirectX and more. Pick what you want from a simple
+window and it downloads and installs everything for you, straight from
+Microsoft.
 
-```powershell
-irm https://wri-gui.top | iex
-```
+## How to run it
 
-This repo is the restored original WRI-GUI (recovered from the live
-deployment after the original GitHub account was deleted), with the one
-thing that broke it fixed: the package list used to be fetched from a
-`redists.json` on the deleted account, and is now inlined into the script so
-it has **no external dependencies** besides Microsoft's own download servers.
+1. Press **Start**, type **PowerShell**.
+2. **Right-click Windows PowerShell → Run as administrator.**
+3. Paste this and press Enter:
 
-## Features
+   ```powershell
+   irm https://wri-gui.top | iex
+   ```
 
-- **Tabbed GUI** — Visual C++ / .NET Framework & Runtime / Extras tabs, dark
-  theme, with per-package checkboxes and version labels.
-- **Preset buttons** — Select All, Select None, VC++ Only, Essentials
-  (VC++ + DirectX), Gaming (VC++ + DirectX + OpenAL + XNA).
-- **Detects what's already installed** — registry uninstall entries, .NET
-  release values, `VCRUNTIME140_1.dll` presence for the unified 2015–2022
-  runtime, DirectX DLL checks — and greys out anything already present.
-- **Progress screen** — progress bar plus a colored status log while
-  installing.
-- **Admin-aware** — when saved as a `.ps1` file it relaunches itself
-  elevated; when piped from the web it asks you to start an elevated
-  PowerShell (it deliberately does **not** re-download-and-re-run itself,
-  which antivirus flags as dropper behaviour). Easiest path: open PowerShell
-  as administrator first, then run the one-liner.
-- **Restart prompt on close** — after installing, closing the window shows a
-  plain Yes/No "A Windows restart is strongly advised. Restart?" prompt.
-  It never restarts without you clicking **Yes**.
+A window opens. Tick the runtimes you want (or use a preset button), click
+**Install Selected**, and wait for it to finish. Administrator rights are
+required because installing system runtimes needs them.
 
-## What's included
+## Using the window
 
-| Tab | Packages |
+- **Tabs** — the runtimes are grouped into **Visual C++**, **.NET Framework
+  & Runtime**, and **Extras**.
+- **Already installed items are greyed out** — the installer checks your PC
+  first and won't reinstall things you already have.
+- **Preset buttons** so you don't have to tick everything by hand:
+  - **Select All** / **Select None**
+  - **VC++ Only** — every Visual C++ Redistributable
+  - **Essentials** — Visual C++ + DirectX
+  - **Gaming** — Visual C++ + DirectX + OpenAL + XNA
+- A progress bar and a log show what's downloading and installing.
+- When it's done, or when you close the window, it will recommend a
+  **restart** so every program picks up the new runtime files. It never
+  restarts without you clicking **Yes**.
+
+## What it can install
+
+| Tab | Runtimes |
 |-----|----------|
-| Visual C++ | 2005, 2008, 2010, 2012 (U4), 2013, 2015–2022 — each installs x86 + x64 |
-| .NET | Framework 3.5 (via DISM), Framework 4.8, Desktop Runtime 6 / 8 / 9 |
-| Extras | DirectX End-User Runtime (June 2010, full redist), OpenAL, XNA Framework 4.0 |
+| **Visual C++** | 2005, 2008, 2010, 2012, 2013, and 2015–2022 — each in both 32-bit and 64-bit |
+| **.NET** | .NET Framework 3.5, .NET Framework 4.8, and .NET Desktop Runtime 6 / 8 / 9 |
+| **Extras** | DirectX End-User Runtime (June 2010), OpenAL, XNA Framework 4.0 |
 
-Install exit codes `0`, `1638`, `3010`, `1641`, `5100` are treated as
-success (already installed / newer present / reboot pending).
+Everything is downloaded from Microsoft (and `openal.org` for OpenAL).
 
-## Deploying to wri-gui.top
+## If your antivirus warns about it
 
-The domain's DNS lives at Hostinger (`ns*.dnsowl.com`) and points at
-**Netlify** — the site itself is a Netlify deploy. To update it:
+Because the command downloads and runs installers, some antivirus tools
+(including Windows Defender/SmartScreen) may warn about it or block it. That
+warning is about *the kind of command it is*, not because it contains
+anything harmful — it only downloads official Microsoft runtimes. If you
+trust this source, you can allow it in your antivirus and run it again. If
+you'd rather not, you can always install any of these runtimes manually from
+Microsoft's website.
 
-1. Log in at [app.netlify.com](https://app.netlify.com) and open the site
-   that has `wri-gui.top` as its custom domain.
-2. Go to **Deploys** and drag-and-drop the [`deploy/`](./deploy) folder from
-   this repo onto the page (or connect this repo with publish directory
-   `deploy`).
-3. Done — `deploy/netlify.toml` rewrites `/` to `wri-gui.ps1` and serves it
-   as `text/plain`, which is exactly what `irm | iex` needs.
+## Is it safe?
 
-Verify with:
-
-```powershell
-irm https://wri-gui.top   # should print the script, starting with the WRI banner
-```
-
-No Hostinger changes are needed; DNS already points at Netlify.
-
-## Repo layout
-
-| Path | Purpose |
-|------|---------|
-| `wri-gui.ps1` | The script (source of truth) |
-| `deploy/` | Ready-to-drop Netlify folder (script + `netlify.toml`) |
-| `recovered/wri-gui.original.ps1` | Byte-for-byte copy of the old live script, for reference |
-
-If you edit `wri-gui.ps1`, copy it over `deploy/wri-gui.ps1` before
-redeploying.
-
-## Antivirus / SmartScreen false positives
-
-`irm | iex` scripts get scanned by AMSI as they run, and a runtime installer
-that downloads and launches executables looks, heuristically, a lot like a
-downloader. This script keeps the risk down by **not** re-downloading and
-re-running itself with `-ExecutionPolicy Bypass -Verb RunAs` (that specific
-pattern is a classic dropper signature and was the most likely trigger for a
-flag). It does not add antivirus exclusions or disable Defender — doing that
-from a script is itself treated as malware and generally requires defeating
-Tamper Protection, so it makes flags worse, not better.
-
-If you want it to stop being flagged when you hand it to other people, the
-two legitimate, durable fixes are:
-
-1. **Code-sign it.** Authenticode-sign `wri-gui.ps1` with a certificate
-   (ideally an OV/EV code-signing cert, which also builds SmartScreen
-   reputation). `Set-AuthenticodeSignature` applies the signature. Once
-   trusted, running under the default `AllSigned`/`RemoteSigned` policy no
-   longer needs `Bypass`.
-2. **Report the false positive to Microsoft** at
-   <https://www.microsoft.com/wdsi/filesubmission> so the detection is
-   corrected for everyone.
-
-Individual users can, of course, choose to allow it on their own machine
-(Defender's "Allowed threats" / restore, or their own exclusion) — that's
-their informed decision, not something the script should do silently.
-
-## Safety notes
-
-- The script is plain and readable — no obfuscation, no persistence. Read it
-  before you run it; `irm | iex` runs whatever the URL returns.
-- All downloads come from `microsoft.com` / `aka.ms` / `go.microsoft.com`
-  (plus `openal.org` for OpenAL).
-- Downloaded executables are checked for a valid `MZ` header before running.
+- It only downloads runtimes from Microsoft's own servers.
+- It doesn't change any system settings, doesn't run in the background, and
+  doesn't stay on your PC after it closes.
+- Every download is checked to be a real installer before it runs.
+- The command runs whatever the website sends, so — as with any
+  `irm … | iex` command — only run it if you trust the source.
 
 ## License
 
-MIT — see [`LICENSE`](./LICENSE).
+MIT.
