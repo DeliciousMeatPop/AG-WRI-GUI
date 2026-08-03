@@ -25,8 +25,11 @@ it has **no external dependencies** besides Microsoft's own download servers.
   runtime, DirectX DLL checks — and greys out anything already present.
 - **Progress screen** — progress bar plus a colored status log while
   installing.
-- **Self-elevating** — works both when piped from the web (`irm | iex`
-  re-runs the one-liner elevated) and when run from a saved `.ps1` file.
+- **Admin-aware** — when saved as a `.ps1` file it relaunches itself
+  elevated; when piped from the web it asks you to start an elevated
+  PowerShell (it deliberately does **not** re-download-and-re-run itself,
+  which antivirus flags as dropper behaviour). Easiest path: open PowerShell
+  as administrator first, then run the one-liner.
 - **Restart prompt on close** — after installing, closing the window shows a
   plain Yes/No "A Windows restart is strongly advised. Restart?" prompt.
   It never restarts without you clicking **Yes**.
@@ -73,6 +76,33 @@ No Hostinger changes are needed; DNS already points at Netlify.
 
 If you edit `wri-gui.ps1`, copy it over `deploy/wri-gui.ps1` before
 redeploying.
+
+## Antivirus / SmartScreen false positives
+
+`irm | iex` scripts get scanned by AMSI as they run, and a runtime installer
+that downloads and launches executables looks, heuristically, a lot like a
+downloader. This script keeps the risk down by **not** re-downloading and
+re-running itself with `-ExecutionPolicy Bypass -Verb RunAs` (that specific
+pattern is a classic dropper signature and was the most likely trigger for a
+flag). It does not add antivirus exclusions or disable Defender — doing that
+from a script is itself treated as malware and generally requires defeating
+Tamper Protection, so it makes flags worse, not better.
+
+If you want it to stop being flagged when you hand it to other people, the
+two legitimate, durable fixes are:
+
+1. **Code-sign it.** Authenticode-sign `wri-gui.ps1` with a certificate
+   (ideally an OV/EV code-signing cert, which also builds SmartScreen
+   reputation). `Set-AuthenticodeSignature` applies the signature. Once
+   trusted, running under the default `AllSigned`/`RemoteSigned` policy no
+   longer needs `Bypass`.
+2. **Report the false positive to Microsoft** at
+   <https://www.microsoft.com/wdsi/filesubmission> so the detection is
+   corrected for everyone.
+
+Individual users can, of course, choose to allow it on their own machine
+(Defender's "Allowed threats" / restore, or their own exclusion) — that's
+their informed decision, not something the script should do silently.
 
 ## Safety notes
 
