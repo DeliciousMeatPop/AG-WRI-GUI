@@ -1,0 +1,14 @@
+# Serve the PowerShell script as plain text at the site root so that
+#   irm https://wri-gui.top | iex
+# downloads and runs it directly.
+
+[[redirects]]
+  from = "/"
+  to = "/wri-gui.ps1"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
