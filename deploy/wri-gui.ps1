@@ -223,6 +223,57 @@ function Test-DotNetFramework4Installed {
 
 
 # =====================
+# UI helpers (styling)
+# =====================
+function Set-RoundedRegion {
+    param($Control, [int]$Radius = 10)
+    $d = [int]($Radius * 2)
+    $w = [int]$Control.Width
+    $h = [int]$Control.Height
+    if ($w -le 0 -or $h -le 0) { return }
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    [void]$path.AddArc(0, 0, $d, $d, 180, 90)
+    [void]$path.AddArc($w - $d, 0, $d, $d, 270, 90)
+    [void]$path.AddArc($w - $d, $h - $d, $d, $d, 0, 90)
+    [void]$path.AddArc(0, $h - $d, $d, $d, 90, 90)
+    $path.CloseFigure()
+    $Control.Region = New-Object System.Drawing.Region($path)
+}
+
+function Get-Lighter {
+    param($Color, [int]$Amount = 22)
+    [System.Drawing.Color]::FromArgb(
+        [Math]::Min(255, [int]$Color.R + $Amount),
+        [Math]::Min(255, [int]$Color.G + $Amount),
+        [Math]::Min(255, [int]$Color.B + $Amount))
+}
+
+function Set-ButtonStyle {
+    param($Button, $Back, $Fore, [int]$Radius = 8)
+    $Button.FlatStyle = "Flat"
+    $Button.FlatAppearance.BorderSize = 0
+    $Button.BackColor = $Back
+    $Button.ForeColor = $Fore
+    $Button.FlatAppearance.MouseOverBackColor = (Get-Lighter $Back 24)
+    $Button.FlatAppearance.MouseDownBackColor = (Get-Lighter $Back 8)
+    $Button.Cursor = "Hand"
+    Set-RoundedRegion $Button $Radius
+}
+
+# Accent colour per runtime category (used for the card's left bar + badge)
+$script:AccentGreen = [System.Drawing.Color]::FromArgb(64, 200, 120)
+function Get-Accent {
+    param([string]$Type)
+    switch ($Type) {
+        "VC"              { return [System.Drawing.Color]::FromArgb(0, 174, 219) }
+        "DotNetFramework" { return [System.Drawing.Color]::FromArgb(149, 128, 255) }
+        "DotNetRuntime"   { return [System.Drawing.Color]::FromArgb(149, 128, 255) }
+        "Extra"           { return [System.Drawing.Color]::FromArgb(255, 150, 60) }
+        default           { return [System.Drawing.Color]::FromArgb(120, 120, 130) }
+    }
+}
+
+# =====================
 # Main Form
 # =====================
 $form = New-Object System.Windows.Forms.Form
@@ -235,43 +286,57 @@ $form.BackColor = [System.Drawing.Color]::FromArgb(26, 26, 26)
 $form.ForeColor = [System.Drawing.Color]::White
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 
-$titleLabel = New-Object System.Windows.Forms.Label
-$titleLabel.Text = "AG Windows Runtime Installer GUI"
-$titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
-$titleLabel.ForeColor = [System.Drawing.Color]::FromArgb(0, 174, 219)
-$titleLabel.AutoSize = $true
-$titleLabel.Location = New-Object System.Drawing.Point(0, 12)
-$form.Controls.Add($titleLabel)
+# ---- Gradient banner header (gradient + title text drawn in Paint) ----
+$banner = New-Object System.Windows.Forms.Panel
+$banner.Location = New-Object System.Drawing.Point(0, 0)
+$banner.Size = New-Object System.Drawing.Size($form.ClientSize.Width, 92)
+$banner.Add_Paint({
+    param($s, $e)
+    $g = $e.Graphics
+    $rect = $s.ClientRectangle
 
-# Center horizontally
-$titleLabel.Left = ($form.ClientSize.Width - $titleLabel.Width) / 2
+    $c1 = [System.Drawing.Color]::FromArgb(16, 18, 26)
+    $c2 = [System.Drawing.Color]::FromArgb(10, 46, 68)
+    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $c1, $c2, [single]25)
+    $g.FillRectangle($brush, $rect)
+    $brush.Dispose()
 
+    $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(0, 174, 219), 2)
+    $g.DrawLine($pen, 0, $rect.Height - 1, $rect.Width, $rect.Height - 1)
+    $pen.Dispose()
 
-$subtitleLabel = New-Object System.Windows.Forms.Label
-$subtitleLabel.Text = "VC++ / DirectX / .NET Runtimes / Extras"
-$subtitleLabel.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 140)
-$subtitleLabel.AutoSize = $true
-$subtitleLabel.Location = New-Object System.Drawing.Point(0, 48)
-$form.Controls.Add($subtitleLabel)
-$subtitleLabel.Left = ($form.ClientSize.Width - $subtitleLabel.Width) / 2
+    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
 
+    $titleFont = New-Object System.Drawing.Font("Segoe UI", 19, [System.Drawing.FontStyle]::Bold)
+    $titleBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(0, 190, 235))
+    $title = "AG Windows Runtime Installer"
+    $tSize = $g.MeasureString($title, $titleFont)
+    $g.DrawString($title, $titleFont, $titleBrush, [single](($rect.Width - $tSize.Width) / 2), [single]12)
+    $titleFont.Dispose(); $titleBrush.Dispose()
 
-$headerPanel = New-Object System.Windows.Forms.TableLayoutPanel
-$headerPanel.Size = New-Object System.Drawing.Size($form.ClientSize.Width, 20)
-$headerPanel.Location = New-Object System.Drawing.Point(0, 68)
-$headerPanel.ColumnCount = 3
-$headerPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle "Percent", 33))
-$headerPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle "Percent", 34))
-$headerPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle "Percent", 33))
+    $subFont = New-Object System.Drawing.Font("Segoe UI", 9)
+    $subBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(150, 165, 180))
+    $sub = "Visual C++     |     DirectX     |     .NET Runtimes     |     Extras"
+    $sSize = $g.MeasureString($sub, $subFont)
+    $g.DrawString($sub, $subFont, $subBrush, [single](($rect.Width - $sSize.Width) / 2), [single]50)
+    $subFont.Dispose(); $subBrush.Dispose()
+})
+$form.Controls.Add($banner)
 
+# Rounded "Running as Administrator" pill
 $adminLabel = New-Object System.Windows.Forms.Label
-$adminLabel.Text = "[OK] Running as Administrator"
-$adminLabel.ForeColor = [System.Drawing.Color]::FromArgb(0,180,0)
-$adminLabel.Anchor = "None"
-$adminLabel.AutoSize = $true
-
-$headerPanel.Controls.Add($adminLabel, 1, 0)
-$form.Controls.Add($headerPanel)
+$adminLabel.Text = "  Running as Administrator  "
+$adminLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+$adminLabel.ForeColor = [System.Drawing.Color]::FromArgb(180, 255, 200)
+$adminLabel.BackColor = [System.Drawing.Color]::FromArgb(28, 70, 45)
+$adminLabel.AutoSize = $false
+$adminLabel.Size = New-Object System.Drawing.Size(210, 22)
+$adminLabel.TextAlign = "MiddleCenter"
+$adminLabel.Location = New-Object System.Drawing.Point(0, 74)
+$banner.Controls.Add($adminLabel)
+$adminLabel.Left = [int](($banner.Width - $adminLabel.Width) / 2)
+$adminLabel.Top = 72
+Set-RoundedRegion $adminLabel 11
 
 
 $tabControl = New-Object System.Windows.Forms.TabControl
@@ -318,61 +383,94 @@ $script:allCheckboxes = @()
 
 function Add-RuntimeCheckbox {
     param($Parent, $Name, $Version, $Y, $Tag)
+
+    # ---- detection ----
+    $installed = $false
+    switch ($Tag.Type) {
+        "VC" { $installed = Test-VCRedistInstalled $Name }
+        "DotNetFramework" {
+            switch ($Name) {
+                ".NET Framework 3.5"   { $installed = Test-DotNetFramework35Installed }
+                ".NET Framework 4.7.2" { $installed = Test-DotNetFramework4Installed -MinRelease 461808 }
+                ".NET Framework 4.8"   { $installed = Test-DotNetFramework4Installed -MinRelease 528040 }
+                default { $installed = $false }
+            }
+        }
+        "DotNetRuntime" {
+            $major = ($Version -split '\.')[0]
+            $installed = Test-DotNetRuntimeInstalled $major
+        }
+        "Extra" {
+            if ($Tag.IsDirectX) { $installed = Test-DirectXInstalled }
+            else { $installed = Test-ProgramInstalled $Name }
+        }
+    }
+
+    # Screenshot/demo mode: pretend nothing is installed (see $script:DemoMode).
+    if ($script:DemoMode) { $installed = $false }
+
+    $accent = Get-Accent $Tag.Type
+    $cardBg = [System.Drawing.Color]::FromArgb(38, 39, 46)
+
+    # ---- card ----
+    $card = New-Object System.Windows.Forms.Panel
+    $card.Size = New-Object System.Drawing.Size(596, 44)
+    $card.Location = New-Object System.Drawing.Point(14, $Y)
+    $card.BackColor = $cardBg
+
+    # left accent bar (green when already installed)
+    $bar = New-Object System.Windows.Forms.Panel
+    $bar.Size = New-Object System.Drawing.Size(4, 44)
+    $bar.Location = New-Object System.Drawing.Point(0, 0)
+    $bar.BackColor = if ($installed) { $script:AccentGreen } else { $accent }
+    $card.Controls.Add($bar)
+
+    # checkbox carrying the runtime name (install logic reads .Text/.Tag/.Checked)
     $cb = New-Object System.Windows.Forms.CheckBox
     $cb.Text = "$Name"
     $cb.Tag = $Tag
-    $cb.Location = New-Object System.Drawing.Point(20, $Y)
-    $cb.Size = New-Object System.Drawing.Size(300, 22)
+    $cb.AutoSize = $false
+    $cb.Size = New-Object System.Drawing.Size(358, 24)
+    $cb.Location = New-Object System.Drawing.Point(18, 10)
+    $cb.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $cb.ForeColor = [System.Drawing.Color]::White
+    $cb.BackColor = $cardBg
     $cb.FlatStyle = "Flat"
-    [void]$Parent.Controls.Add($cb)
-    
-    $verLabel = New-Object System.Windows.Forms.Label
-    $verLabel.Text = "v$Version"
-    $verLabel.Location = New-Object System.Drawing.Point(330, ($Y + 2))
-    $verLabel.Size = New-Object System.Drawing.Size(180, 20)
-    $verLabel.ForeColor = [System.Drawing.Color]::FromArgb(100, 100, 100)
-    [void]$Parent.Controls.Add($verLabel)
-    $installed = $false
+    $cb.Cursor = "Hand"
+    $card.Controls.Add($cb)
 
-	switch ($Tag.Type) {
-		"VC" {
-			$installed = Test-VCRedistInstalled $Name
-		}
+    # rounded version badge
+    $badge = New-Object System.Windows.Forms.Label
+    $badge.Text = "v$Version"
+    $badge.AutoSize = $false
+    $badge.Size = New-Object System.Drawing.Size(104, 22)
+    $badge.Location = New-Object System.Drawing.Point(478, 11)
+    $badge.TextAlign = "MiddleCenter"
+    $badge.Font = New-Object System.Drawing.Font("Consolas", 8, [System.Drawing.FontStyle]::Bold)
+    $badge.ForeColor = $accent
+    $badge.BackColor = [System.Drawing.Color]::FromArgb(26, 30, 38)
+    $card.Controls.Add($badge)
+    Set-RoundedRegion $badge 10
 
-		"DotNetFramework" {
-			switch ($Name) {
-				".NET Framework 3.5"  { $installed = Test-DotNetFramework35Installed }
-				".NET Framework 4.7.2" { $installed = Test-DotNetFramework4Installed -MinRelease 461808 }
-				".NET Framework 4.8"   { $installed = Test-DotNetFramework4Installed -MinRelease 528040 }
-				default { $installed = $false }
-			}
-		}
+    if ($installed) {
+        $cb.Checked = $false
+        $cb.Enabled = $false
+        $cb.ForeColor = [System.Drawing.Color]::FromArgb(120, 132, 122)
 
-		"DotNetRuntime" {
-			$major = ($Version -split '\.')[0]
-			$installed = Test-DotNetRuntimeInstalled $major
-        }
-		"Extra" {
-			if ($Tag.IsDirectX) {
-				$installed = Test-DirectXInstalled
-			} else {
-				$installed = Test-ProgramInstalled $Name
-			}
-		}
-	}
+        $pill = New-Object System.Windows.Forms.Label
+        $pill.Text = "INSTALLED"
+        $pill.AutoSize = $false
+        $pill.Size = New-Object System.Drawing.Size(92, 22)
+        $pill.Location = New-Object System.Drawing.Point(380, 11)
+        $pill.TextAlign = "MiddleCenter"
+        $pill.Font = New-Object System.Drawing.Font("Segoe UI", 7.5, [System.Drawing.FontStyle]::Bold)
+        $pill.ForeColor = [System.Drawing.Color]::FromArgb(190, 255, 205)
+        $pill.BackColor = [System.Drawing.Color]::FromArgb(30, 66, 44)
+        $card.Controls.Add($pill)
+        Set-RoundedRegion $pill 10
+    }
 
-
-	# Screenshot/demo mode: pretend nothing is installed (see $script:DemoMode).
-	if ($script:DemoMode) { $installed = $false }
-
-	if ($installed) {
-		$cb.Checked = $false
-		$cb.Enabled = $false
-		$cb.Text += " (Installed)"
-		$cb.ForeColor = [System.Drawing.Color]::Gray
-	}
-
+    [void]$Parent.Controls.Add($card)
     $script:allCheckboxes += $cb
 }
 
@@ -385,11 +483,11 @@ $vcLabel.Location = New-Object System.Drawing.Point(20, 15)
 $vcLabel.AutoSize = $true
 $tabVC.Controls.Add($vcLabel)
 
-$yPos = 50
+$yPos = 46
 for ($i = 0; $i -lt $Redists.x86.Count; $i++) {
     $item = $Redists.x86[$i]
     Add-RuntimeCheckbox -Parent $tabVC -Name $item.Name -Version $item.Version -Y $yPos -Tag @{Type="VC"; Index=$i}
-    $yPos += 32
+    $yPos += 48
 }
 
 # .NET Tab
@@ -401,7 +499,7 @@ $dotnetLabel.Location = New-Object System.Drawing.Point(20, 15)
 $dotnetLabel.AutoSize = $true
 $tabDotNet.Controls.Add($dotnetLabel)
 
-$yPos = 50
+$yPos = 46
 for ($i = 0; $i -lt $Redists.dotnet.Count; $i++) {
     $item = $Redists.dotnet[$i]
     $dotnetType = if ($item.type -eq "framework") { "DotNetFramework" } else { "DotNetRuntime" }
@@ -410,7 +508,7 @@ Add-RuntimeCheckbox -Parent $tabDotNet -Name $item.Name -Version $item.Version -
     Type  = $dotnetType
     Index = $i
 }
-    $yPos += 32
+    $yPos += 48
 }
 
 # Extras Tab
@@ -422,7 +520,7 @@ $extrasLabel.Location = New-Object System.Drawing.Point(20, 15)
 $extrasLabel.AutoSize = $true
 $tabExtras.Controls.Add($extrasLabel)
 
-$yPos = 50
+$yPos = 46
 for ($i = 0; $i -lt $Redists.extras.Count; $i++) {
     $item = $Redists.extras[$i]
     $ver = if ($item.Version) { $item.Version } else { "Latest" }
@@ -432,7 +530,7 @@ for ($i = 0; $i -lt $Redists.extras.Count; $i++) {
 		IsDirectX = $item.IsDirectX
 	}
 
-    $yPos += 32
+    $yPos += 48
 }
 
 # Bottom Panel
@@ -530,6 +628,49 @@ $selectGamingBtn.Add_Click({
 })
 
 $bottomPanel.Controls.Add($selectGamingBtn)
+
+# ---- Rounded, hovering button styling ----
+Set-ButtonStyle $installStartBtn    ([System.Drawing.Color]::FromArgb(0, 120, 215))  ([System.Drawing.Color]::White) 12
+Set-ButtonStyle $selectAllBtn       ([System.Drawing.Color]::FromArgb(52, 52, 60))   ([System.Drawing.Color]::White) 8
+Set-ButtonStyle $selectNoneBtn      ([System.Drawing.Color]::FromArgb(52, 52, 60))   ([System.Drawing.Color]::White) 8
+Set-ButtonStyle $selectVCBtn        ([System.Drawing.Color]::FromArgb(52, 52, 60))   ([System.Drawing.Color]::White) 8
+Set-ButtonStyle $selectEssentialBtn ([System.Drawing.Color]::FromArgb(28, 58, 64))   ([System.Drawing.Color]::FromArgb(120, 235, 255)) 8
+Set-ButtonStyle $selectGamingBtn    ([System.Drawing.Color]::FromArgb(56, 32, 58))   ([System.Drawing.Color]::FromArgb(255, 150, 240)) 8
+
+# ---- Live selection counter ----
+$script:countLabel = New-Object System.Windows.Forms.Label
+$script:countLabel.AutoSize = $false
+$script:countLabel.Size = New-Object System.Drawing.Size(640, 20)
+$script:countLabel.Location = New-Object System.Drawing.Point(0, 40)
+$script:countLabel.TextAlign = "MiddleCenter"
+$script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(150, 160, 175)
+$script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$script:countLabel.Text = "0 selected"
+$bottomPanel.Controls.Add($script:countLabel)
+
+function Update-SelectionCount {
+    if (-not $script:countLabel) { return }
+    $n = @($script:allCheckboxes | Where-Object { $_.Checked }).Count
+    $total = @($script:allCheckboxes | Where-Object { $_.Enabled }).Count
+    $script:countLabel.Text = "$n of $total selected"
+}
+foreach ($c in $script:allCheckboxes) { $c.Add_CheckedChanged({ Update-SelectionCount }) }
+Update-SelectionCount
+
+# ---- Install button pulse / surge animation ----
+$script:pulsePhase = 0.0
+$script:pulseTimer = New-Object System.Windows.Forms.Timer
+$script:pulseTimer.Interval = 45
+$script:pulseTimer.Add_Tick({
+    if ($script:installCompleted) { $script:pulseTimer.Stop(); return }
+    $script:pulsePhase += 0.16
+    $f = (([Math]::Sin($script:pulsePhase) + 1) / 2)   # 0..1 easing
+    $r = [int](0   + (40  - 0)   * $f)
+    $g = [int](120 + (175 - 120) * $f)
+    $b = [int](215 + (255 - 215) * $f)
+    $installStartBtn.BackColor = [System.Drawing.Color]::FromArgb($r, $g, $b)
+})
+$form.Add_Shown({ $script:pulseTimer.Start() })
 
 $progressLabel = New-Object System.Windows.Forms.Label
 $progressLabel.Location = New-Object System.Drawing.Point(0, 45)
@@ -688,7 +829,11 @@ $installStartBtn.Add_Click({
     
     $selected = @($script:allCheckboxes | Where-Object { $_.Checked })
     if ($selected.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Please select at least one item to install.", "Nothing Selected", "OK", "Warning"); return }
-    
+
+    # Stop the idle pulse and settle the button on its base colour
+    if ($script:pulseTimer) { $script:pulseTimer.Stop() }
+    $installStartBtn.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+
 	$tabControl.Visible = $false
 	$bottomPanel.Visible = $false
 	$installPanel.Visible = $true
@@ -815,7 +960,7 @@ $form.Add_Shown({
         $selectGamingBtn.Enabled = $false
 
         [System.Windows.Forms.MessageBox]::Show(
-            "Congratulations! 🎉`n`n" +
+            "Congratulations!`n`n" +
             "All redistributables this installer provides are already installed on your system.`n`n" +
             "You may close the program, pat yourself on the back, and enjoy knowing your PC is ready for all types of bullshit.",
             "All Runtimes Installed",
