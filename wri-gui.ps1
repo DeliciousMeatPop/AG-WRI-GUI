@@ -10,17 +10,27 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 if (-not $isAdmin) {
     $scriptPath = if ($PSCommandPath) { $PSCommandPath } elseif ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $null }
 
-    try {
-        $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh.exe" } else { "powershell.exe" }
-        if ($scriptPath) {
-            # Running from a saved .ps1 file - relaunch the file elevated
+    if ($scriptPath) {
+        # Saved as a .ps1 file - relaunch that file elevated. This is the same
+        # elevation the original script used and is not what antivirus objects
+        # to (it runs a local file, not a re-download).
+        try {
+            $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh.exe" } else { "powershell.exe" }
             Start-Process $shell -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
-        } else {
-            # Running via  irm https://wri-gui.top | iex  - no file on disk, so
-            # re-run the same one-liner in an elevated shell
-            Start-Process $shell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://wri-gui.top | iex`"" -Verb RunAs
-        }
-    } catch { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show("This application requires administrator privileges.", "Admin Required", "OK", "Warning") }
+        } catch { }
+    } else {
+        # Piped from the web (irm | iex) with no file on disk. Deliberately do
+        # NOT auto-elevate here by re-downloading and re-running ourselves -
+        # that self-re-download-with-bypass pattern is what antivirus flags as
+        # dropper behaviour. Ask the user to start an elevated PowerShell.
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.MessageBox]::Show(
+            "This installer needs to run as Administrator.`n`n" +
+            "1. Press Start and type: PowerShell`n" +
+            "2. Right-click Windows PowerShell and choose 'Run as administrator'`n" +
+            "3. Paste and run:  irm https://wri-gui.top | iex",
+            "Administrator required", "OK", "Information") | Out-Null
+    }
     exit
 }
 
