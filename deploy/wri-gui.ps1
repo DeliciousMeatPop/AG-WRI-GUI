@@ -435,7 +435,10 @@ function Add-RuntimeCheckbox {
     $cb.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $cb.ForeColor = [System.Drawing.Color]::White
     $cb.BackColor = $cardBg
-    $cb.FlatStyle = "Flat"
+    # Standard (classic) glyph = white box, black check when ticked - much
+    # clearer on the dark cards than the low-contrast Flat checkbox.
+    $cb.FlatStyle = "Standard"
+    $cb.CheckAlign = "MiddleLeft"
     $cb.Cursor = "Hand"
     $card.Controls.Add($cb)
 
@@ -671,6 +674,60 @@ $script:pulseTimer.Add_Tick({
     $installStartBtn.BackColor = [System.Drawing.Color]::FromArgb($r, $g, $b)
 })
 $form.Add_Shown({ $script:pulseTimer.Start() })
+
+# ---- Footer: "Made with <3 by DMP of ARMGDDN Games" (link to Telegram) ----
+# The heart is built from a code point at runtime so the file stays ASCII and
+# renders correctly whether run via irm|iex (UTF-8) or saved and run as a file.
+$footer = New-Object System.Windows.Forms.FlowLayoutPanel
+$footer.AutoSize = $true
+$footer.FlowDirection = "LeftToRight"
+$footer.WrapContents = $false
+$footer.BackColor = [System.Drawing.Color]::FromArgb(26, 26, 26)
+$footer.Location = New-Object System.Drawing.Point(0, 122)
+$footer.Margin = New-Object System.Windows.Forms.Padding(0)
+
+$footFont = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$footGray = [System.Drawing.Color]::FromArgb(150, 160, 175)
+
+$fMade = New-Object System.Windows.Forms.Label
+$fMade.Text = "Made with"
+$fMade.AutoSize = $true
+$fMade.Font = $footFont
+$fMade.ForeColor = $footGray
+$fMade.Margin = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+
+$fHeart = New-Object System.Windows.Forms.Label
+$fHeart.Text = [string][char]0x2764
+$fHeart.AutoSize = $true
+$fHeart.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$fHeart.ForeColor = [System.Drawing.Color]::FromArgb(235, 80, 90)
+$fHeart.Margin = New-Object System.Windows.Forms.Padding(3, 1, 3, 0)
+
+$fBy = New-Object System.Windows.Forms.Label
+$fBy.Text = "by DMP of"
+$fBy.AutoSize = $true
+$fBy.Font = $footFont
+$fBy.ForeColor = $footGray
+$fBy.Margin = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+
+$fLink = New-Object System.Windows.Forms.LinkLabel
+$fLink.Text = "ARMGDDN Games"
+$fLink.AutoSize = $true
+$fLink.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$fLink.LinkColor = [System.Drawing.Color]::FromArgb(0, 190, 235)
+$fLink.ActiveLinkColor = [System.Drawing.Color]::FromArgb(120, 235, 255)
+$fLink.VisitedLinkColor = [System.Drawing.Color]::FromArgb(0, 190, 235)
+$fLink.LinkBehavior = "HoverUnderline"
+$fLink.Margin = New-Object System.Windows.Forms.Padding(4, 2, 0, 0)
+$fLink.Add_LinkClicked({
+    try { Start-Process "https://t.me/ARMGDDNGames" } catch { }
+})
+
+$footer.Controls.AddRange(@($fMade, $fHeart, $fBy, $fLink))
+$bottomPanel.Controls.Add($footer)
+# Centre the footer once its preferred size is known
+$footer.Left = [int](($bottomPanel.Width - $footer.PreferredSize.Width) / 2)
+$form.Add_Shown({ $footer.Left = [int](($bottomPanel.ClientSize.Width - $footer.PreferredSize.Width) / 2) })
 
 $progressLabel = New-Object System.Windows.Forms.Label
 $progressLabel.Location = New-Object System.Drawing.Point(0, 45)
