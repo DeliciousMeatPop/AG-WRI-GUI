@@ -81,7 +81,7 @@ $Redists = @{
         @{ Name="OpenAL"; Version="2.1.0.0"; IsOpenAL=$true
            Url="https://openal.org/downloads/oalinst.zip"; Args="/silent" }
         @{ Name="XNA Framework Redistributable 4.0"; Version="4.0.20823"; IsMsi=$true
-           Url="https://download.microsoft.com/download/A/C/2/AC2C903B-E6E8-42C2-9FD7-BEBAC362A930/xnafx40_redist.msi"; Args="/quiet /norestart" }
+           Url="https://download.microsoft.com/download/a/c/2/ac2c903b-e6e8-42c2-9fd7-bebac362a930/xnafx40_redist.msi"; Args="/quiet /norestart" }
     )
 }
 
@@ -861,9 +861,12 @@ function Install-Package { param([string]$Name, [string]$Url, [string]$Arguments
 		Invoke-WebRequest -Uri $Url -OutFile $filePath -UseBasicParsing -Headers $webHeaders -ErrorAction Stop
 
         $magic = [System.IO.File]::ReadAllBytes($filePath)
-        if ($magic.Length -lt 2 -or $magic[0] -ne 0x4D -or $magic[1] -ne 0x5A) {
+        # EXE starts with "MZ"; MSI is an OLE compound file (D0 CF 11 E0)
+        $validHeader = if ($IsMsi) { $magic.Length -ge 4 -and $magic[0] -eq 0xD0 -and $magic[1] -eq 0xCF -and $magic[2] -eq 0x11 -and $magic[3] -eq 0xE0 }
+                       else { $magic.Length -ge 2 -and $magic[0] -eq 0x4D -and $magic[1] -eq 0x5A }
+        if (-not $validHeader) {
             Remove-Item $filePath -Force -ErrorAction SilentlyContinue
-            throw "Downloaded file is not a valid executable. The URL may have returned an error page."
+            throw "Downloaded file is not a valid installer. The URL may have returned an error page."
         }
 
         Update-Status "Installing $Name..." "Cyan"
