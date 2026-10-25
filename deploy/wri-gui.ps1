@@ -100,35 +100,33 @@ $script:installCompleted = $false
 $script:DemoMode = [bool]$env:WRI_DEMO -or [bool]$WRI_DEMO
 
 function Test-VCRedistInstalled {
-    param([string]$Name)
+    param([string]$Name, [ValidateSet("x86","x64")][string]$Arch)
 
-    $paths = @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    )
+    # 32-bit products register under WOW6432Node on a 64-bit OS, 64-bit ones
+    # under the native hive. Checking each hive on its own means an x64-only
+    # install no longer makes the x86 runtime (what most games need) look done.
+    $is64Bit = [Environment]::Is64BitOperatingSystem
+    $hive = if ($Arch -eq "x64") { "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" }
+            elseif ($is64Bit)    { "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" }
+            else                 { "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" }
 
-    foreach ($path in $paths) {
-        foreach ($item in Get-ItemProperty $path -ErrorAction SilentlyContinue) {
+    $target = $Name.ToLower()
 
-            if (-not $item.DisplayName) { continue }
+    # VCRUNTIME140_1.dll (x64 only) was added in v14.28 (VS2019 16.8); an old
+    # 2015 install matches by name but lacks it, so require the DLL on x64.
+    $needsDll = ($target -match "2015" -and $Arch -eq "x64" -and
+                 -not (Test-Path "$env:SystemRoot\System32\VCRUNTIME140_1.dll"))
 
-            # Normalize both strings for safer matching
-            $installed = $item.DisplayName.ToLower()
-            $target    = $Name.ToLower()
+    foreach ($item in Get-ItemProperty $hive -ErrorAction SilentlyContinue) {
 
-            if ($installed -like "*$target*") {
-                return $true
-            }
+        if (-not $item.DisplayName) { continue }
 
-            # Special case: 2015–2022 unified runtime
-            if ($target -match "2015" -and $installed -match "2015|2017|2019|2022") {
-                # VCRUNTIME140_1.dll was added in v14.28 (VS2019 16.8); an old 2015
-                # install won't have it even though the name matches, so check the DLL.
-                if ((Test-Path "$env:SystemRoot\System32\VCRUNTIME140_1.dll") -or
-                    (Test-Path "$env:SystemRoot\SysWOW64\VCRUNTIME140_1.dll")) {
-                    return $true
-                }
-            }
+        $installed = $item.DisplayName.ToLower()
+
+        # Direct name match, or the unified 2015-2022 runtime under an older name
+        if ($installed -like "*$target*" -or
+            ($target -match "2015" -and $installed -match "visual c\+\+ (2015|2017|2019|2022)")) {
+            if (-not $needsDll) { return $true }
         }
     }
 
@@ -165,20 +163,25 @@ function Test-DotNetRuntimeInstalled {
 }
 
 function Test-DirectXInstalled {
-    $dxFiles = @(
-        "$env:WINDIR\System32\d3dx9_43.dll",
-        "$env:WINDIR\SysWOW64\d3dx9_43.dll",
-        "$env:WINDIR\System32\XAudio2_7.dll",
-        "$env:WINDIR\SysWOW64\XAudio2_7.dll"
+    # The June 2010 pack installs these (legacy D3DX / XAudio / XInput / shader
+    # compiler) into the 32-bit folder, plus the 64-bit one on a 64-bit OS.
+    # All of them must exist - the old "any one file" test passed on machines
+    # that only had a single leftover DLL, so the pack never got installed.
+    $dxNames = @(
+        "d3dx9_43.dll", "d3dx10_43.dll", "d3dx11_43.dll",
+        "d3dcompiler_43.dll", "xinput1_3.dll", "XAudio2_7.dll", "X3DAudio1_7.dll"
     )
 
-    foreach ($file in $dxFiles) {
-        if (Test-Path $file) {
-            return $true
+    $dirs = if ([Environment]::Is64BitOperatingSystem) { @("$env:WINDIR\SysWOW64", "$env:WINDIR\System32") }
+            else { @("$env:WINDIR\System32") }
+
+    foreach ($dir in $dirs) {
+        foreach ($name in $dxNames) {
+            if (-not (Test-Path (Join-Path $dir $name))) { return $false }
         }
     }
 
-    return $false
+    return $true
 }
 
 function Test-ProgramInstalled {
@@ -387,7 +390,12 @@ function Add-RuntimeCheckbox {
     # ---- detection ----
     $installed = $false
     switch ($Tag.Type) {
-        "VC" { $installed = Test-VCRedistInstalled $Name }
+        "VC" {
+            $installed = Test-VCRedistInstalled -Name $Name -Arch "x86"
+            if ($installed -and [Environment]::Is64BitOperatingSystem) {
+                $installed = Test-VCRedistInstalled -Name $Name -Arch "x64"
+            }
+        }
         "DotNetFramework" {
             switch ($Name) {
                 ".NET Framework 3.5"   { $installed = Test-DotNetFramework35Installed }
@@ -831,11 +839,12 @@ function Install-Package { param([string]$Name, [string]$Url, [string]$Arguments
 			}
 
 			Update-Status "Installing $Name..." "Cyan"
-			Start-Process -FilePath $dxSetup.FullName -ArgumentList "/silent" -Wait -WindowStyle Hidden
+			$dxProc = Start-Process -FilePath $dxSetup.FullName -ArgumentList "/silent" -Wait -PassThru -WindowStyle Hidden
 
 			Remove-Item $dxExe -Force -ErrorAction SilentlyContinue
 			Remove-Item $dxRoot -Recurse -Force -ErrorAction SilentlyContinue
 
+			if ($dxProc.ExitCode -ne 0) { return @{ Success = $false; Message = "DXSETUP exit code: $($dxProc.ExitCode)" } }
 			return @{ Success = $true; Message = "" }
 		}
 
@@ -928,13 +937,22 @@ $installStartBtn.Add_Click({
 				$x64 = $Redists.x64[$tag.Index]
 				$result = Install-Package -Name "$($x86.Name) x86" -Url $x86.Url -Arguments $x86.Args
 				if ($result.Success) {
+					$itemSuccess = $true
+					if (-not (Test-VCRedistInstalled -Name $x86.Name -Arch "x86")) {
+						$script:failures += @{Name="$($x86.Name) x86"; Error="installer finished but the runtime was not detected - reboot and re-run to confirm"}
+						$itemSuccess = $false
+					}
 					if ($is64Bit) {
 						$x64Result = Install-Package -Name "$($x64.Name) x64" -Url $x64.Url -Arguments $x64.Args
 						if (-not $x64Result.Success) {
 							$script:failures += @{Name="$($x64.Name) x64"; Error=$x64Result.Message}
+							$itemSuccess = $false
+						}
+						elseif (-not (Test-VCRedistInstalled -Name $x64.Name -Arch "x64")) {
+							$script:failures += @{Name="$($x64.Name) x64"; Error="installer finished but the runtime was not detected - reboot and re-run to confirm"}
+							$itemSuccess = $false
 						}
 					}
-					$itemSuccess = $true
 				}
 				else {
 					$script:failures += @{Name="$($x86.Name) x86"; Error=$result.Message}
@@ -968,7 +986,12 @@ $installStartBtn.Add_Click({
             "Extra" {
                 $item = $Redists.extras[$tag.Index]
                 if ($item.Url_x86 -and $item.Url_x64) { $url = if ($is64Bit) { $item.Url_x64 } else { $item.Url_x86 }; $result = Install-Package -Name $item.Name -Url $url -Arguments $item.Args }
-                elseif ($item.IsDirectX) { $result = Install-Package -Name $item.Name -Url $item.Url -Arguments $item.Args -IsDirectX $true }
+                elseif ($item.IsDirectX) {
+                    $result = Install-Package -Name $item.Name -Url $item.Url -Arguments $item.Args -IsDirectX $true
+                    if ($result.Success -and -not (Test-DirectXInstalled)) {
+                        $result = @{ Success = $false; Message = "installer finished but the runtime files were not found - reboot and re-run to confirm" }
+                    }
+                }
                 elseif ($item.IsOpenAL) { $result = Install-Package -Name $item.Name -Url $item.Url -Arguments $item.Args -IsOpenAL $true }
                 elseif ($item.IsMsi) { $result = Install-Package -Name $item.Name -Url $item.Url -Arguments $item.Args -IsMsi $true }
                 else { $result = Install-Package -Name $item.Name -Url $item.Url -Arguments $item.Args }
